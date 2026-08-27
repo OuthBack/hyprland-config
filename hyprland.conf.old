@@ -40,6 +40,7 @@ $notification_manager = mako
 $bar = waybar
 $wallpaper = hyprpaper
 $audio_effects = easyeffects --hide-window & jamesdsp --tray 
+$calendar = waylandar-widget
 
 
 #################
@@ -57,6 +58,7 @@ exec-once = $audio_effects
 exec-once = [workspace 1 silent] $browser
 exec-once = [workspace 3 silent] $terminal
 exec-once = [workspace 5 silent] $password_manager
+exec-once = $calendar
 
 # Start hyprlock with a small delay to ensure Wayland is ready
 exec-once = sleep 1 && hyprlock
