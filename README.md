@@ -1,3 +1,5 @@
+repo: https://github.com/end-4/dots-hyprland
+
 O que é o repositório
 
 dots-hyprland (também chamado "illogical-impulse") são os dotfiles do usuário end-4 para Hyprland (compositor Wayland), com foco numa "shell" gráfica completa construída em Quickshell — não é um instalador de sistema (drivers, partições etc.), apenas configurações + um script que copia tudo para o lugar certo.
@@ -142,3 +144,81 @@ Aparência da tela de bloqueio (fallback) dots/.config/hypr/hyprlock.conf
 Aparência do menu de sessão (botões) quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
 Atalhos de lock/sleep/shutdown dots/.config/hypr/custom/keybinds.lua (não o de hyprland/)
 Suspender ao fechar tampa do notebook descomentar linha do Lid Switch em custom/keybinds.lua
+
+## Troubleshooting: Shell (Quickshell) não inicia após `yay -Syu`
+
+### Sintomas
+
+- O Hyprland inicia normalmente (workspaces, foco de janela funcionam).
+- Os atalhos de teclado (`keybinds.lua`) funcionam.
+- **A interface gráfica (barra, dock, sidebars, etc.) não aparece** — como se o Quickshell nunca tivesse subido.
+
+### Causa
+
+Isso geralmente acontece depois de um `yay -Syu` que atualiza o `qt6-base` e/ou `qt6-declarative` para uma build diferente da que o pacote `illogical-impulse-quickshell-git` foi compilado contra.
+
+O Quickshell usa símbolos **privados** do Qt6 (`Qt_6_PRIVATE_API`), que não têm garantia de compatibilidade binária (ABI) entre atualizações — mesmo em patch-versions. Resultado: o binário `qs` falha ao carregar antes mesmo de tentar ler o `shell.qml`, então não sobra log de QML nenhum, só uma falha silenciosa no `exec-once` do Hyprland.
+
+### Diagnóstico
+
+1. Abra um terminal (ou troque de TTY com `Ctrl+Alt+F2`/`F3` se a sessão gráfica não tiver terminal disponível).
+2. Rode o Quickshell manualmente para ver o erro real, em vez de deixar o Hyprland engolir a falha:
+   ```bash
+   qs -c ii
+   ```
+3. Se aparecer algo como:
+   ```
+   qs: symbol lookup error: qs: undefined symbol: _ZN23QUntypedPropertyBindingC1EP23QPropertyBindingPrivate, version Qt_6_PRIVATE_API
+   ```
+   confirma que é exatamente esse problema: **mismatch de ABI entre o Qt6 instalado e o binário do Quickshell**.
+
+### Por que `yay -S illogical-impulse-quickshell-git --rebuild` não funciona
+
+`illogical-impulse-quickshell-git` **não é um pacote do AUR**. É um PKGBUILD local que vive dentro do próprio repositório dos dotfiles, em:
+```
+sdata/dist-arch/illogical-impulse-quickshell-git/
+```
+O `(illogical-impulse)` que aparece no `yay -Qs` é um **grupo pacman** (`groups=(illogical-impulse)` no PKGBUILD), não o nome de um repositório — por isso `yay -S illogical-impulse-quickshell-git` retorna `No AUR package found`.
+
+### Solução
+
+Vá até a pasta desse PKGBUILD **dentro do clone local do dots-hyprland** (a mesma pasta usada quando você rodou `./setup install` pela primeira vez) e recompile diretamente com `makepkg`:
+
+```bash
+cd ~/dots-hyprland/sdata/dist-arch/illogical-impulse-quickshell-git
+makepkg -Afsi --noconfirm
+```
+
+Flags:
+- `-A` → ignora checagem de arquitetura
+- `-f` → força rebuild mesmo se já existir um pacote buildado
+- `-s` → resolve/instala dependências que faltarem via pacman
+- `-i` → instala o pacote depois de compilar
+
+Se não souber onde ficou o clone do repositório:
+```bash
+find ~ -maxdepth 3 -iname "dots-hyprland" -type d 2>/dev/null
+```
+Se não existir mais (foi apagado após a instalação), clone de novo:
+```bash
+git clone https://github.com/end-4/dots-hyprland.git
+```
+
+### Verificação
+
+Depois do rebuild, teste de novo:
+```bash
+qs -c ii
+```
+Se o erro de símbolo sumir, mate qualquer instância antiga do Quickshell e deixe o Hyprland reexecutar o `exec-once` (ou reinicie a sessão gráfica):
+```bash
+pkill qs 2>/dev/null; pkill quickshell 2>/dev/null
+```
+
+### Prevenção
+
+Depois de qualquer `yay -Syu` que mexa em pacotes `qt6-*`, vale recompilar o Quickshell **antes** de reiniciar a sessão gráfica:
+```bash
+cd ~/dots-hyprland/sdata/dist-arch/illogical-impulse-quickshell-git && makepkg -Afsi --noconfirm
+```
+Isso evita ficar sem interface gráfica depois de um update do sistema.
